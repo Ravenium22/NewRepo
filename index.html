@@ -54,14 +54,6 @@
                 "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
                 "stateMutability": "view",
                 "type": "function"
-            },
-            {
-                "constant": true,
-                "inputs": [],
-                "name": "rewardsDuration",
-                "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
-                "stateMutability": "view",
-                "type": "function"
             }
         ];
 
@@ -75,25 +67,26 @@
                 const web3 = new Web3('https://bartio.rpc.berachain.com');
                 const vault = new web3.eth.Contract(VAULT_ABI, VAULT_ADDRESS);
 
-                const [rewardRate, totalSupply, rewardsDuration] = await Promise.all([
+                const [rewardRate, totalSupply] = await Promise.all([
                     vault.methods.rewardRate().call(),
-                    vault.methods.totalSupply().call(),
-                    vault.methods.rewardsDuration().call()
+                    vault.methods.totalSupply().call()
                 ]);
 
-                log(`Reward rate: ${web3.utils.fromWei(rewardRate, 'ether')} BGT/sec`);
-                log(`Total supply: ${web3.utils.fromWei(totalSupply, 'ether')} LP`);
-                log(`Rewards duration: ${rewardsDuration} seconds`);
+                const formattedRate = web3.utils.fromWei(rewardRate, 'ether');
+                const formattedSupply = web3.utils.fromWei(totalSupply, 'ether');
+
+                log(`Raw reward rate: ${rewardRate}`);
+                log(`Formatted reward rate: ${formattedRate} BGT/sec`);
+                log(`Total supply: ${formattedSupply} LP`);
 
                 document.getElementById('vaultData').innerHTML = `
                     <div class="space-y-2">
-                        <div>Reward Rate: ${web3.utils.fromWei(rewardRate, 'ether')} BGT/sec</div>
-                        <div>Total Staked: ${web3.utils.fromWei(totalSupply, 'ether')} LP</div>
-                        <div>Duration: ${rewardsDuration} seconds</div>
+                        <div>Total Staked: ${Number(formattedSupply).toLocaleString()} LP</div>
+                        <div>Reward Rate: ${Number(formattedRate).toFixed(8)} BGT/sec</div>
                     </div>
                 `;
 
-                return { rewardRate, totalSupply, rewardsDuration };
+                return { rewardRate, totalSupply, formattedRate, formattedSupply };
             } catch (error) {
                 log(`Error: ${error.message}`);
                 document.getElementById('vaultData').innerHTML = `Error: ${error.message}`;
@@ -114,22 +107,24 @@
                 const vaultData = await getVaultData();
                 if (!vaultData) return;
 
-                const web3 = new Web3('https://bartio.rpc.berachain.com');
-                const rewardRate = web3.utils.fromWei(vaultData.rewardRate, 'ether');
-                const totalSupply = web3.utils.fromWei(vaultData.totalSupply, 'ether');
-
-                // Calculate rewards using rate per second
+                const userShare = lpAmount / Number(vaultData.formattedSupply);
                 const secondsInDay = 86400;
-                const userShare = lpAmount / totalSupply;
-                const dailyReward = rewardRate * secondsInDay * userShare;
+                const rawDailyRate = Number(vaultData.formattedRate) * secondsInDay;
+                const dailyReward = rawDailyRate * userShare;
+                const totalReward = dailyReward * days;
+
+                log(`Calculation details:`);
+                log(`User share: ${userShare}`);
+                log(`Raw daily rate: ${rawDailyRate}`);
+                log(`Daily reward: ${dailyReward}`);
 
                 document.getElementById('result').innerHTML = `
                     <div class="space-y-2">
                         <div class="font-bold">Calculation Details:</div>
                         <div>Your Share: ${(userShare * 100).toFixed(4)}%</div>
-                        <div>Daily Rate: ${dailyReward.toFixed(4)} BGT</div>
+                        <div>Daily BGT: ${dailyReward.toFixed(4)} BGT</div>
                         <div class="text-lg font-bold text-green-600 mt-2">
-                            ${days} Day Reward: ${(dailyReward * days).toFixed(4)} BGT
+                            ${days} Day Reward: ${totalReward.toFixed(4)} BGT
                         </div>
                     </div>
                 `;
