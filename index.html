@@ -10,57 +10,40 @@
 <body class="bg-gray-100 p-6">
     <div class="max-w-4xl mx-auto bg-white rounded-xl shadow-lg p-6">
         <h1 class="text-2xl font-bold mb-4">BGT Rewards Calculator</h1>
-        
         <div id="debug" class="mb-4 p-4 bg-gray-100 rounded-lg font-mono text-sm"></div>
 
-        <!-- Test Single Vault -->
         <div class="mb-6">
-            <h2 class="text-xl font-semibold mb-4">LBGT-WBERA Vault Test</h2>
-            <div id="vaultData" class="p-4 bg-blue-50 rounded-lg">
-                Loading vault data...
-            </div>
+            <h2 class="text-xl font-semibold mb-4">LBGT-WBERA Vault Data</h2>
+            <div id="vaultData" class="p-4 bg-blue-50 rounded-lg">Loading...</div>
         </div>
 
-        <!-- Calculator -->
         <div class="mb-6">
-            <h2 class="text-xl font-semibold mb-4">Position Calculator</h2>
+            <h2 class="text-xl font-semibold mb-4">Calculator</h2>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                 <div>
                     <label class="block text-sm font-medium mb-1">LP Token Amount</label>
-                    <input type="number" 
-                           id="lpInput" 
-                           placeholder="Enter LP amount" 
-                           class="w-full p-2 border rounded"/>
+                    <input type="number" id="lpInput" class="w-full p-2 border rounded"/>
                 </div>
                 <div>
                     <label class="block text-sm font-medium mb-1">Time Period (days)</label>
-                    <input type="number" 
-                           id="daysInput" 
-                           value="7" 
-                           min="1" 
-                           max="7" 
-                           class="w-full p-2 border rounded"/>
+                    <input type="number" id="daysInput" value="7" min="1" max="7" class="w-full p-2 border rounded"/>
                 </div>
             </div>
-            <button onclick="calculateRewards()" 
-                    class="w-full p-2 bg-blue-500 text-white rounded hover:bg-blue-600">
+            <button onclick="calculateRewards()" class="w-full p-2 bg-blue-500 text-white rounded hover:bg-blue-600">
                 Calculate
             </button>
-            <div id="result" class="mt-4 p-4 bg-green-50 rounded-lg">
-                Enter LP amount to calculate rewards
-            </div>
+            <div id="result" class="mt-4 p-4 bg-green-50 rounded-lg"></div>
         </div>
     </div>
 
     <script>
-        const VAULT_ADDRESS = '0x7a6b92457e7D7e7a5C1A2245488b850B7Da8E01D'; // LBGT-WBERA vault
+        const VAULT_ADDRESS = '0x7a6b92457e7D7e7a5C1A2245488b850B7Da8E01D';
         const VAULT_ABI = [
             {
                 "constant": true,
                 "inputs": [],
-                "name": "rewardPerToken",
+                "name": "rewardRate",
                 "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
-                "payable": false,
                 "stateMutability": "view",
                 "type": "function"
             },
@@ -69,16 +52,14 @@
                 "inputs": [],
                 "name": "totalSupply",
                 "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
-                "payable": false,
                 "stateMutability": "view",
                 "type": "function"
             },
             {
                 "constant": true,
-                "inputs": [{"internalType": "address", "name": "account", "type": "address"}],
-                "name": "balanceOf",
+                "inputs": [],
+                "name": "rewardsDuration",
                 "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
-                "payable": false,
                 "stateMutability": "view",
                 "type": "function"
             }
@@ -86,8 +67,7 @@
 
         function log(message) {
             console.log(message);
-            const debugDiv = document.getElementById('debug');
-            debugDiv.innerHTML += `${new Date().toLocaleTimeString()}: ${message}<br>`;
+            document.getElementById('debug').innerHTML += `${new Date().toLocaleTimeString()}: ${message}<br>`;
         }
 
         async function getVaultData() {
@@ -95,29 +75,27 @@
                 const web3 = new Web3('https://bartio.rpc.berachain.com');
                 const vault = new web3.eth.Contract(VAULT_ABI, VAULT_ADDRESS);
 
-                log('Getting vault data...');
-                
-                // Get total supply first
-                const totalSupply = await vault.methods.totalSupply().call();
-                log(`Total supply: ${web3.utils.fromWei(totalSupply, 'ether')} LP`);
+                const [rewardRate, totalSupply, rewardsDuration] = await Promise.all([
+                    vault.methods.rewardRate().call(),
+                    vault.methods.totalSupply().call(),
+                    vault.methods.rewardsDuration().call()
+                ]);
 
-                // Get reward per token
-                const rewardPerToken = await vault.methods.rewardPerToken().call();
-                log(`Reward per token: ${web3.utils.fromWei(rewardPerToken, 'ether')}`);
+                log(`Reward rate: ${web3.utils.fromWei(rewardRate, 'ether')} BGT/sec`);
+                log(`Total supply: ${web3.utils.fromWei(totalSupply, 'ether')} LP`);
+                log(`Rewards duration: ${rewardsDuration} seconds`);
 
                 document.getElementById('vaultData').innerHTML = `
                     <div class="space-y-2">
-                        <div>Current Reward Rate: ${web3.utils.fromWei(rewardPerToken, 'ether')} BGT/LP</div>
+                        <div>Reward Rate: ${web3.utils.fromWei(rewardRate, 'ether')} BGT/sec</div>
                         <div>Total Staked: ${web3.utils.fromWei(totalSupply, 'ether')} LP</div>
+                        <div>Duration: ${rewardsDuration} seconds</div>
                     </div>
                 `;
 
-                return { rewardPerToken, totalSupply };
+                return { rewardRate, totalSupply, rewardsDuration };
             } catch (error) {
                 log(`Error: ${error.message}`);
-                if (error.message.includes('invalid type')) {
-                    log('ABI type mismatch. Please check contract interface.');
-                }
                 document.getElementById('vaultData').innerHTML = `Error: ${error.message}`;
                 return null;
             }
@@ -137,22 +115,21 @@
                 if (!vaultData) return;
 
                 const web3 = new Web3('https://bartio.rpc.berachain.com');
-                const baseRewardRate = web3.utils.fromWei(vaultData.rewardPerToken, 'ether');
-                
-                let totalRewards = 0;
-                for (let day = 0; day < days; day++) {
-                    const dayRate = baseRewardRate * Math.pow(0.9, day);
-                    totalRewards += dayRate * lpAmount;
-                }
+                const rewardRate = web3.utils.fromWei(vaultData.rewardRate, 'ether');
+                const totalSupply = web3.utils.fromWei(vaultData.totalSupply, 'ether');
+
+                // Calculate rewards using rate per second
+                const secondsInDay = 86400;
+                const userShare = lpAmount / totalSupply;
+                const dailyReward = rewardRate * secondsInDay * userShare;
 
                 document.getElementById('result').innerHTML = `
                     <div class="space-y-2">
-                        <div class="font-bold">Estimated Rewards (${days} days):</div>
-                        <div class="text-lg text-green-600 font-bold">
-                            ${totalRewards.toFixed(2)} BGT
-                        </div>
-                        <div class="text-sm text-gray-600">
-                            Average daily: ${(totalRewards / days).toFixed(2)} BGT
+                        <div class="font-bold">Calculation Details:</div>
+                        <div>Your Share: ${(userShare * 100).toFixed(4)}%</div>
+                        <div>Daily Rate: ${dailyReward.toFixed(4)} BGT</div>
+                        <div class="text-lg font-bold text-green-600 mt-2">
+                            ${days} Day Reward: ${(dailyReward * days).toFixed(4)} BGT
                         </div>
                     </div>
                 `;
@@ -163,11 +140,7 @@
             }
         }
 
-        // Initialize
-        window.addEventListener('load', () => {
-            log('Initializing...');
-            getVaultData();
-        });
+        window.addEventListener('load', getVaultData);
     </script>
 </body>
 </html>
