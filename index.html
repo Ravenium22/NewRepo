@@ -37,6 +37,7 @@
     <script>
         const VAULT_ADDRESS = '0x7a6b92457e7D7e7a5C1A2245488b850B7Da8E01D';
         const SECONDS_IN_DAY = 86400;
+        const SCALING_FACTOR = 1e18; // For wei to ether conversion
 
         async function getVaultData() {
             try {
@@ -67,9 +68,11 @@
                     vault.methods.totalSupply().call()
                 ]);
 
-                const dailyRate = Number(web3.utils.fromWei(rewardRate, 'ether')) * SECONDS_IN_DAY;
+                // Scale down reward rate and convert to daily
+                const dailyRate = (Number(rewardRate) / SCALING_FACTOR) * SECONDS_IN_DAY;
                 const totalStaked = Number(web3.utils.fromWei(totalSupply, 'ether'));
 
+                log(`Raw reward rate: ${rewardRate}`);
                 log(`Daily reward rate: ${dailyRate} BGT/day`);
                 log(`Total staked: ${totalStaked} LP`);
 
@@ -105,6 +108,9 @@
                     const userShare = lpAmount / totalStaked;
                     const dailyReward = dailyRate * userShare;
                     const totalReward = dailyReward * days;
+
+                    log(`User share: ${userShare}`);
+                    log(`Daily reward: ${dailyReward}`);
 
                     document.getElementById('result').innerHTML = `
                         <div class="space-y-2">
