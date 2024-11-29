@@ -56,16 +56,29 @@
         const VAULT_ADDRESS = '0x7a6b92457e7D7e7a5C1A2245488b850B7Da8E01D'; // LBGT-WBERA vault
         const VAULT_ABI = [
             {
+                "constant": true,
                 "inputs": [],
                 "name": "rewardPerToken",
-                "outputs": [{"type": "uint256"}],
+                "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
+                "payable": false,
                 "stateMutability": "view",
                 "type": "function"
             },
             {
+                "constant": true,
                 "inputs": [],
                 "name": "totalSupply",
-                "outputs": [{"type": "uint256"}],
+                "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
+                "payable": false,
+                "stateMutability": "view",
+                "type": "function"
+            },
+            {
+                "constant": true,
+                "inputs": [{"internalType": "address", "name": "account", "type": "address"}],
+                "name": "balanceOf",
+                "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
+                "payable": false,
                 "stateMutability": "view",
                 "type": "function"
             }
@@ -83,13 +96,14 @@
                 const vault = new web3.eth.Contract(VAULT_ABI, VAULT_ADDRESS);
 
                 log('Getting vault data...');
-                const [rewardPerToken, totalSupply] = await Promise.all([
-                    vault.methods.rewardPerToken().call(),
-                    vault.methods.totalSupply().call()
-                ]);
-
-                log(`Reward per token: ${rewardPerToken}`);
+                
+                // Get total supply first
+                const totalSupply = await vault.methods.totalSupply().call();
                 log(`Total supply: ${web3.utils.fromWei(totalSupply, 'ether')} LP`);
+
+                // Get reward per token
+                const rewardPerToken = await vault.methods.rewardPerToken().call();
+                log(`Reward per token: ${web3.utils.fromWei(rewardPerToken, 'ether')}`);
 
                 document.getElementById('vaultData').innerHTML = `
                     <div class="space-y-2">
@@ -101,6 +115,9 @@
                 return { rewardPerToken, totalSupply };
             } catch (error) {
                 log(`Error: ${error.message}`);
+                if (error.message.includes('invalid type')) {
+                    log('ABI type mismatch. Please check contract interface.');
+                }
                 document.getElementById('vaultData').innerHTML = `Error: ${error.message}`;
                 return null;
             }
@@ -122,10 +139,9 @@
                 const web3 = new Web3('https://bartio.rpc.berachain.com');
                 const baseRewardRate = web3.utils.fromWei(vaultData.rewardPerToken, 'ether');
                 
-                // Calculate with rate decay over the week
                 let totalRewards = 0;
                 for (let day = 0; day < days; day++) {
-                    const dayRate = baseRewardRate * Math.pow(0.9, day); // Example decay rate
+                    const dayRate = baseRewardRate * Math.pow(0.9, day);
                     totalRewards += dayRate * lpAmount;
                 }
 
@@ -137,9 +153,6 @@
                         </div>
                         <div class="text-sm text-gray-600">
                             Average daily: ${(totalRewards / days).toFixed(2)} BGT
-                        </div>
-                        <div class="mt-4 text-sm text-gray-500">
-                            Note: Rewards stream over time with decreasing rates
                         </div>
                     </div>
                 `;
