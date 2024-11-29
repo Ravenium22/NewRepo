@@ -9,7 +9,7 @@
 </head>
 <body class="bg-gray-100 p-6">
     <div class="max-w-4xl mx-auto bg-white rounded-xl shadow-lg p-6">
-        <h1 class="text-2xl font-bold mb-4">BGT Rewards Calculator</h1>
+        <h1 class="text-2xl font-bold mb-4">BGT Calculator</h1>
         <div id="debug" class="mb-4 p-4 bg-gray-100 rounded-lg font-mono text-sm"></div>
 
         <div class="mb-6">
@@ -29,64 +29,54 @@
                     <input type="number" id="daysInput" value="7" min="1" max="7" class="w-full p-2 border rounded"/>
                 </div>
             </div>
-            <button onclick="calculateRewards()" class="w-full p-2 bg-blue-500 text-white rounded hover:bg-blue-600">
-                Calculate
-            </button>
+            <button onclick="calculateRewards()" class="w-full p-2 bg-blue-500 text-white rounded hover:bg-blue-600">Calculate</button>
             <div id="result" class="mt-4 p-4 bg-green-50 rounded-lg"></div>
         </div>
     </div>
 
     <script>
         const VAULT_ADDRESS = '0x7a6b92457e7D7e7a5C1A2245488b850B7Da8E01D';
-        const VAULT_ABI = [
-            {
-                "constant": true,
-                "inputs": [],
-                "name": "rewardRate",
-                "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
-                "stateMutability": "view",
-                "type": "function"
-            },
-            {
-                "constant": true,
-                "inputs": [],
-                "name": "totalSupply",
-                "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
-                "stateMutability": "view",
-                "type": "function"
-            }
-        ];
-
-        function log(message) {
-            console.log(message);
-            document.getElementById('debug').innerHTML += `${new Date().toLocaleTimeString()}: ${message}<br>`;
-        }
+        const SECONDS_IN_DAY = 86400;
 
         async function getVaultData() {
             try {
                 const web3 = new Web3('https://bartio.rpc.berachain.com');
-                const vault = new web3.eth.Contract(VAULT_ABI, VAULT_ADDRESS);
+                const vault = new web3.eth.Contract([
+                    {
+                        "inputs": [],
+                        "name": "rewardRate",
+                        "outputs": [{"type": "uint256"}],
+                        "stateMutability": "view",
+                        "type": "function"
+                    },
+                    {
+                        "inputs": [],
+                        "name": "totalSupply",
+                        "outputs": [{"type": "uint256"}],
+                        "stateMutability": "view",
+                        "type": "function"
+                    }
+                ], VAULT_ADDRESS);
 
                 const [rewardRate, totalSupply] = await Promise.all([
                     vault.methods.rewardRate().call(),
                     vault.methods.totalSupply().call()
                 ]);
 
-                const formattedRate = web3.utils.fromWei(rewardRate, 'ether');
-                const formattedSupply = web3.utils.fromWei(totalSupply, 'ether');
+                const dailyRate = Number(web3.utils.fromWei(rewardRate, 'ether')) * SECONDS_IN_DAY;
+                const totalStaked = Number(web3.utils.fromWei(totalSupply, 'ether'));
 
-                log(`Raw reward rate: ${rewardRate}`);
-                log(`Formatted reward rate: ${formattedRate} BGT/sec`);
-                log(`Total supply: ${formattedSupply} LP`);
+                log(`Daily reward rate: ${dailyRate} BGT/day`);
+                log(`Total staked: ${totalStaked} LP`);
 
                 document.getElementById('vaultData').innerHTML = `
                     <div class="space-y-2">
-                        <div>Total Staked: ${Number(formattedSupply).toLocaleString()} LP</div>
-                        <div>Reward Rate: ${Number(formattedRate).toFixed(8)} BGT/sec</div>
+                        <div>Total Staked: ${totalStaked.toLocaleString()} LP</div>
+                        <div>Daily Reward Rate: ${dailyRate.toFixed(2)} BGT</div>
                     </div>
                 `;
 
-                return { rewardRate, totalSupply, formattedRate, formattedSupply };
+                return { dailyRate, totalStaked };
             } catch (error) {
                 log(`Error: ${error.message}`);
                 document.getElementById('vaultData').innerHTML = `Error: ${error.message}`;
@@ -94,7 +84,7 @@
             }
         }
 
-        async function calculateRewards() {
+        function calculateRewards() {
             const lpAmount = parseFloat(document.getElementById('lpInput').value);
             const days = parseInt(document.getElementById('daysInput').value);
 
@@ -104,35 +94,31 @@
             }
 
             try {
-                const vaultData = await getVaultData();
-                if (!vaultData) return;
+                getVaultData().then(data => {
+                    if (!data) return;
 
-                const userShare = lpAmount / Number(vaultData.formattedSupply);
-                const secondsInDay = 86400;
-                const rawDailyRate = Number(vaultData.formattedRate) * secondsInDay;
-                const dailyReward = rawDailyRate * userShare;
-                const totalReward = dailyReward * days;
+                    const { dailyRate, totalStaked } = data;
+                    const userShare = lpAmount / totalStaked;
+                    const dailyReward = dailyRate * userShare;
+                    const totalReward = dailyReward * days;
 
-                log(`Calculation details:`);
-                log(`User share: ${userShare}`);
-                log(`Raw daily rate: ${rawDailyRate}`);
-                log(`Daily reward: ${dailyReward}`);
-
-                document.getElementById('result').innerHTML = `
-                    <div class="space-y-2">
-                        <div class="font-bold">Calculation Details:</div>
-                        <div>Your Share: ${(userShare * 100).toFixed(4)}%</div>
-                        <div>Daily BGT: ${dailyReward.toFixed(4)} BGT</div>
-                        <div class="text-lg font-bold text-green-600 mt-2">
-                            ${days} Day Reward: ${totalReward.toFixed(4)} BGT
+                    document.getElementById('result').innerHTML = `
+                        <div class="space-y-2">
+                            <div>Your Share: ${(userShare * 100).toFixed(4)}%</div>
+                            <div>Daily BGT: ${dailyReward.toFixed(2)} BGT</div>
+                            <div class="text-lg font-bold text-green-600">${days} Day Reward: ${totalReward.toFixed(2)} BGT</div>
                         </div>
-                    </div>
-                `;
-
+                    `;
+                });
             } catch (error) {
-                log(`Calculation error: ${error.message}`);
+                log(`Error: ${error.message}`);
                 document.getElementById('result').innerHTML = `Error: ${error.message}`;
             }
+        }
+
+        function log(message) {
+            console.log(message);
+            document.getElementById('debug').innerHTML += `${new Date().toLocaleTimeString()}: ${message}<br>`;
         }
 
         window.addEventListener('load', getVaultData);
